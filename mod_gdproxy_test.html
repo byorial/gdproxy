@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+ 
+<link rel="stylesheet" href="https://cdn.plyr.io/3.6.8/plyr.css" />
+<script src="https://cdn.plyr.io/3.6.8/plyr.js"></script>
+
+<div>
+  <form id='test' name='test'>
+  {{ macros.setting_input_text_and_buttons('fileid', '파일ID', [['play_video_btn', '재생']], desc=['재생할파일의ID']) }}
+  </form>
+</div> <!--전체-->
+
+<!--videoplay modal-->
+{{ macros.m_modal_start('playvideo_modal', '영상재생', 'modal-lg') }}
+  <div id="playvideo_div"></div>
+{{ macros.m_modal_end() }}
+ 
+<script type="text/javascript">
+var package_name = "{{arg['package_name'] }}";
+var sub = "{{arg['sub'] }}";
+var proxy_url = "{{arg['proxy_url'] }}";
+var player = null;
+ 
+$(document).ready(function(){
+});
+
+$(function(){
+    $('#playvideo_modal').modal({
+        show: false
+    }).on('hidden.bs.modal', function(){
+        //$(this).find('video')[0].pause();
+	player.pause();
+    });
+});
+
+$("body").on('click', '#play_video_btn', function(e) {
+  e.preventDefault();
+  var str = '';
+  var fileid = document.getElementById('fileid').value;
+  var video_url = proxy_url+'&f='+fileid
+  
+  str = '<video controls autostart="true" playsinline id="myVideo">';
+  str += '<source type="video/mp4" src="'+video_url+'" width="720px"/>';
+  str += '</video>'
+  document.getElementById("playvideo_div").innerHTML = str;
+  player = new Plyr(document.getElementById('myVideo'));
+  $("#playvideo_modal").modal();
+  player.play();
+});
+
+</script>
+{% endblock %}
