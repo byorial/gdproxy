@@ -1,6 +1,6 @@
 # gdproxy 
 ## gdrive proxy module for SJVA
-- gdrive에 있는 파일을 rclone.conf 
+- gdrive에 있는 파일을 rclone.conf 파일을 이용하여 인증하여 웹에서 바로 플레이 가능하도록 하는 모듈
 ---
 ## 사용법
 - 모듈 설치 후 동영상 주소를 아래와 같이 설정 
