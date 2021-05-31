@@ -9,6 +9,7 @@ from framework import py_urllib
 from plugin import LogicModuleBase
 from tool_base import ToolUtil 
 
+
 #########################################################
 from mod import P
 name = 'gdproxy'
@@ -69,14 +70,11 @@ class GDproxy(LogicModuleBase):
                     logger.error('fileid is required')
                     return Response('fileid is required', 400, content_type='text/html')
 
-                remote = self.get_remote_by_name(remote_name)
-                if not remote:
-                    logger.error(f'remote_name({remote_name}) does not exists')
-                    return Response('remote_name({remote_name}) does not exists', 400, content_type='text/html')
+                token = self.get_access_token_by_remote_name(remote_name)
+                if not token:
+                    return Response('Failed to get Token by remote name({remote_name})', 400, content_type='text/html')
 
-                token = json.loads(remote['token'])['access_token']
                 url = f'https://www.googleapis.com/drive/v3/files/{fileid}?alt=media'
-
                 headers = self.get_headers(dict(request.headers), kind, token)
                 r = requests.get(url, headers=headers, stream=True)
                 if name != None:
@@ -90,19 +88,6 @@ class GDproxy(LogicModuleBase):
         except Exception as e: 
             logger.error('Exception:%s', e)
             logger.error(traceback.format_exc())
-
-    def get_remote_by_name(self, remote_name):
-        try:
-            from rclone.logic import Logic as LogicRclone
-            remotes = LogicRclone.load_remotes()
-            for remote in remotes:
-                if remote['name'] == remote_name:
-                    return remote
-            return None
-        except Exception as e:
-            logger.error('Exception:%s', e)
-            logger.error(traceback.format_exc())
-            return None
 
     def get_headers(self, headers, kind, token):
         try:
@@ -120,6 +105,52 @@ class GDproxy(LogicModuleBase):
             del(headers['X-Forwarded-For'])
             if 'Cookie' in headers: del(headers['Cookie'])
             return headers
+        except Exception as e:
+            logger.error('Exception:%s', e)
+            logger.error(traceback.format_exc())
+            return None
+
+    def get_remote_by_name(self, remote_name):
+        try:
+            from rclone.logic import Logic as LogicRclone
+            remotes = LogicRclone.load_remotes()
+            for remote in remotes:
+                if remote['name'] == remote_name:
+                    return remote
+            return None
+        except Exception as e:
+            logger.error('Exception:%s', e)
+            logger.error(traceback.format_exc())
+            return None
+
+    def get_access_token_by_remote_name(self, remote_name):
+        try:
+            remote = self.get_remote_by_name(remote_name)
+            if not remote:
+                logger.error(f'failed to get remote by remote_name({remote_name})')
+                return None
+
+            # for user accounts
+            if 'token' in remote:
+                return json.loads(remote['token'])['access_token']
+
+            # for service accounts
+            try:
+                from google.auth.transport.requests import Request as GRequest
+                from google.oauth2 import service_account
+            except ImportError:
+                os.system("{} install --upgrade google-api-python-client google-auth-httplib2 google-auth-oauthlib oauth2client".format(app.config['config']['pip']))
+
+            SCOPES = ['https://www.googleapis.com/auth/drive']
+            path_accounts = remote['service_account_file_path']
+
+            import random
+            path_sa_json = os.path.join(path_accounts, random.choice(os.listdir(path_accounts)))
+            logger.debug(f'selected service-account-json: {path_sa_json}')
+
+            creds = service_account.Credentials.from_service_account_file(path_sa_json, scopes=SCOPES)
+            creds.refresh(GRequest())
+            return creds.token
         except Exception as e:
             logger.error('Exception:%s', e)
             logger.error(traceback.format_exc())
