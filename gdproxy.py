@@ -9,6 +9,8 @@ from framework import py_urllib
 from plugin import LogicModuleBase
 from tool_base import ToolUtil 
 
+from lib_gdrive import LibGdrive
+from rclone.logic import Logic as LogicRclone
 
 #########################################################
 from mod import P
@@ -28,17 +30,33 @@ class GDproxy(LogicModuleBase):
         # TODO: test - video and sub
         f'{name}_test_video_fileid': '',
         f'{name}_test_subtitle_fileid': '',
+
+        f'{name}_prev_parent_id': '',
+
     }
     def __init__(self, P):
-        super(GDproxy, self).__init__(P, 'setting')
+        super(GDproxy, self).__init__(P, 'gdrive')
         self.name = name
         self.test = None
+        self.dir_cache = {}
+        self.last_remote = ''
+        self.last_folderid = ''
+        self.last_path = ''
 
     def process_menu(self, sub, req):
-        arg = ModelSetting.to_dict()
-        arg['sub'] = self.name
-        arg['proxy_url'] = ToolUtil.make_apikey_url(f'/{package_name}/api/{name}/proxy')
         try:
+            logger.debug(f'sub: {sub}')
+            logger.debug(req)
+
+            arg = ModelSetting.to_dict()
+            arg['sub'] = self.name
+            arg['proxy_url'] = ToolUtil.make_apikey_url(f'/{package_name}/api/{name}/proxy')
+
+            if sub == 'gdrive':
+                arg['remote_names'] = '|'.join(self.get_remote_names())
+                arg['last_remote'] = self.last_remote
+                arg['last_folderid'] = self.last_folderid
+                arg['last_path'] = self.last_path
             return render_template(f"{package_name}_{name}_{sub}.html", arg=arg)
         except Exception as exception:
             logger.error('Exception:%s', exception)
@@ -47,7 +65,14 @@ class GDproxy(LogicModuleBase):
 
     def process_ajax(self, sub, req):
         try:
+            logger.debug(f'AJAX sub: {sub}')
             ret = {'ret':'success'}
+            if sub == 'listgdrive':
+                ret = self.listgdrive(req)
+            elif sub == 'reset_cache':
+                self.dir_cache.clear()
+                logger.debug(self.dir_cache)
+                ret['msg'] = '디렉토리 캐시를 초기화하였습니다.'
             return jsonify(ret)
         except Exception as e: 
             logger.error('Exception:%s', e)
@@ -110,9 +135,12 @@ class GDproxy(LogicModuleBase):
             logger.error(traceback.format_exc())
             return None
 
+    def get_remote_names(self):
+        remotes = LogicRclone.load_remotes()
+        return [x['name'] for x in remotes]
+
     def get_remote_by_name(self, remote_name):
         try:
-            from rclone.logic import Logic as LogicRclone
             remotes = LogicRclone.load_remotes()
             for remote in remotes:
                 if remote['name'] == remote_name:
@@ -155,3 +183,62 @@ class GDproxy(LogicModuleBase):
             logger.error('Exception:%s', e)
             logger.error(traceback.format_exc())
             return None
+
+    def listgdrive(self, req):
+        try:
+            ret = {}
+            logger.debug(req.form)
+            remote = self.get_remote_by_name(req.form['remote_name'])
+            folderid = req.form['folderid']
+            path = req.form['path']
+            force = req.form['force']
+            is_root = False
+
+
+            if folderid == 'root':
+                is_root = True
+                if 'team_drive' in remote:
+                    folderid = remote['team_drive']
+                elif 'root_folder_id' in remote:
+                    folderid = remote['root_folder_id']
+
+            self.last_remote = remote['name']
+            self.last_folderid = folderid
+            self.last_path = path
+
+            cache_key = remote['name'] + f':{path}'
+            logger.debug(f'cache_key: {cache_key}')
+
+            if force == 'false' and cache_key in self.dir_cache:
+                ret['ret'] = 'success'
+                ret['list'] = self.dir_cache[cache_key]
+                logger.debug(f'{folderid} exists in cache.. return')
+                return ret
+
+            logger.debug(f'{folderid} search gdrive')
+            service = LibGdrive.auth_by_rclone_remote(remote)
+
+            if 'service_account_file' in remote:
+                drive_id = remote['root_folder_id']
+                children = LibGdrive.get_children_for_sa(folderid, drive_id, service=service, fields=['id','name','mimeType','trashed','size','parents','shortcutDetails'])
+            else:
+                children = LibGdrive.get_children(folderid, service=service, fields=['id','name','mimeType','trashed','size','parents','shortcutDetails'])
+
+            ret['ret'] = 'success'
+            schildren = sorted(children, key=(lambda x: x['name']))
+
+            if not is_root:
+                #info = LibGdrive.get_file_info(folder_id, service=service)
+                #parent_id = info.data['parents'][0]
+                parent_id = ModelSetting.get('gdproxy_prev_parent_id')
+                pitem = [{'name':'..', 'mimeType':'application/vnd.google-apps.folder', 'id':parent_id, 'trashed':False, 'parents':[], 'size':'-'}]
+                schildren = pitem + schildren
+
+            self.dir_cache[cache_key] = schildren
+            ModelSetting.set('gdproxy_prev_parent_id', folderid)
+            ret['list'] = schildren
+            return ret
+        except Exception as e:
+            logger.error('Exception:%s', e)
+            logger.error(traceback.format_exc())
+            return {'ret':'error', 'msg':str(e)}

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
  
-<link rel="stylesheet" href="https://cdn.plyr.io/3.6.8/plyr.css" />
-<script src="https://cdn.plyr.io/3.6.8/plyr.js"></script>
+<script src="https://vjs.zencdn.net/7.11.4/video.min.js"></script>
+<link href="https://vjs.zencdn.net/7.11.4/video-js.css" rel="stylesheet" />
 
 <div>
   <form id='test' name='test'>
@@ -12,7 +12,9 @@
 
 <!--videoplay modal-->
 {{ macros.m_modal_start('playvideo_modal', '영상재생', 'modal-lg') }}
-  <div id="playvideo_div"></div>
+<video id=player width=960 height=540 class="video-js vjs-default-skin vjs-16-9" autoplay controls>
+  <source id='video_src' src="" type="" />
+</video>
 {{ macros.m_modal_end() }}
  
 <script type="text/javascript">
@@ -37,8 +39,15 @@ $("body").on('click', '#play_video_btn', function(e) {
   e.preventDefault();
   var str = '';
   var fileid = document.getElementById('fileid').value;
-  var video_url = proxy_url+'&f='+fileid
-  
+  var video_url = proxy_url + ((proxy_url.indexOf('?') == -1) ? '?' : '&') + 'f=' + fileid;
+
+  document.getElementById("video_src").setAttribute("src", video_url);
+  document.getElementById("video_src").setAttribute("type", mtype);
+  $("#playvideo_modal").modal();
+  player = videojs('player');
+  player.play();
+
+  /*
   str = '<video controls autostart="true" playsinline id="myVideo">';
   str += '<source type="video/mp4" src="'+video_url+'" width="720px"/>';
   str += '</video>'
@@ -46,6 +55,7 @@ $("body").on('click', '#play_video_btn', function(e) {
   player = new Plyr(document.getElementById('myVideo'));
   $("#playvideo_modal").modal();
   player.play();
+  */
 });
 
 </script>
