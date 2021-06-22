@@ -8,15 +8,14 @@
   <form id='test' name='test'>
   {{ macros.setting_input_text_and_buttons('fileid', '파일ID', [['play_video_btn', '재생']], desc=['재생할파일의ID']) }}
   </form>
+</div>
+<div>
+<form name="playform">
+  <input type="hidden" id="play_title" name="play_title">
+  <input type="hidden" id="play_source_src" name="play_source_src">
+  <input type="hidden" id="play_source_type" name="play_source_type">
+</form>
 </div> <!--전체-->
-
-<!--videoplay modal-->
-{{ macros.m_modal_start('playvideo_modal', '영상재생', 'modal-lg') }}
-<video id=player width=960 height=540 class="video-js vjs-default-skin vjs-16-9" autoplay controls>
-  <source id='video_src' src="" type="" />
-</video>
-{{ macros.m_modal_end() }}
- 
 <script type="text/javascript">
 var package_name = "{{arg['package_name'] }}";
 var sub = "{{arg['sub'] }}";
@@ -26,36 +25,24 @@ var player = null;
 $(document).ready(function(){
 });
 
-$(function(){
-    $('#playvideo_modal').modal({
-        show: false
-    }).on('hidden.bs.modal', function(){
-        //$(this).find('video')[0].pause();
-	player.pause();
-    });
-});
-
 $("body").on('click', '#play_video_btn', function(e) {
-  e.preventDefault();
-  var str = '';
   var fileid = document.getElementById('fileid').value;
+  var str = '';
   var video_url = proxy_url + ((proxy_url.indexOf('?') == -1) ? '?' : '&') + 'f=' + fileid;
+  
+  var form = document.playform;
+  var url = '/system/videojs';
+  var popupWidth = 980;
+  var leftPos = screen.width - popupWidth;
+  window.open('', fileid, "location=no,directories=no,resizable=no,status=no,toolbar=no,menubar=no,width=" + popupWidth + ", height=560, top=100, left=" + leftPos);
+  form.action = url;
+  form.method = "post";
+  form.target = fileid;
 
-  document.getElementById("video_src").setAttribute("src", video_url);
-  document.getElementById("video_src").setAttribute("type", mtype);
-  $("#playvideo_modal").modal();
-  player = videojs('player');
-  player.play();
-
-  /*
-  str = '<video controls autostart="true" playsinline id="myVideo">';
-  str += '<source type="video/mp4" src="'+video_url+'" width="720px"/>';
-  str += '</video>'
-  document.getElementById("playvideo_div").innerHTML = str;
-  player = new Plyr(document.getElementById('myVideo'));
-  $("#playvideo_modal").modal();
-  player.play();
-  */
+  $('#play_title').val('영상재생');
+  $('#play_source_src').val(video_url);
+  $('#play_source_type').val('video/mp4');
+  form.submit();
 });
 
 </script>

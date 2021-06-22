@@ -1,8 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
- 
-<script src="https://vjs.zencdn.net/7.11.4/video.min.js"></script>
-<link href="https://vjs.zencdn.net/7.11.4/video-js.css" rel="stylesheet" />
 
 <div>
 <form id="form_search" name="form_search" class="form-inline" style="text-align:left">
@@ -10,18 +7,28 @@
       <div class="row show-grid" align="center">
         <span class="col-md-12" align="center">
           <span class="col-md-2" style="align-items:center; text-align:center;">
-           <span id="remote_options_div"></span>
+           <span id="projection_options_span"></span>
+	  </span>
+          <span class="col-md-2" style="align-items:center; text-align:center;">
+           <span id="remote_options_span"></span>
           </span>
-	  <span class="col-md-8">
+	  <span class="col-md-5">
            <input type="text" id="current_path" class="form-control form-control-sm w-50" placeholder="현재경로가표시됨" readonly>
 	  </span>
-          <span class="col-md-4">
+          <span class="col-md-3">
            {{ macros.m_button_group([['search_btn', '검색'], ['refresh_btn', '새로고침'], ['reset_cache_btn', '캐시삭제']]) }}
           </span>
         </span>
        </div>
     </div>
   </form>
+<form name="playform">
+  <input type="hidden" id="play_title" name="play_title">
+  <input type="hidden" id="play_source_src" name="play_source_src">
+  <input type="hidden" id="play_source_type" name="play_source_type">
+  <input type="hidden" id="play_subtitle_src" name="play_subtitle_src">
+  <input type="hidden" id="play_vr_projection" name="play_vr_projection">
+</form>
 <div style="word-break: break-all;">
 <span class="col-md-12" style="align-items:left; text-align:center;">
 <div class="list-group" id="select_gdrive_file_list">
@@ -31,14 +38,6 @@
  <hr>
 </div> <!--전체-->
 
-<!--videoplay modal-->
-{{ macros.m_modal_start('playvideo_modal', '영상재생', 'modal-lg') }}
-<video id=player width=960 height=540 class="video-js vjs-default-skin vjs-16-9" autoplay controls>
-  <source id='video_src' src="" type="" />
-</video>
-{{ macros.m_modal_end() }}
-
-<!--videoplay modal-->
 <script type="text/javascript">
 var package_name = "{{arg['package_name'] }}";
 var sub = "{{arg['sub'] }}";
@@ -49,28 +48,55 @@ var remote_names = remote_str.split('|');
 var curr_remote = "{{arg['last_remote']}}"
 var curr_folderid = "{{arg['last_folderid']}}"
 var curr_path = "{{arg['last_path']}}"
-var player = null;
+var subtitle_fileid = "nosub";
  
 $(document).ready(function(){
   set_remote_options();
+  set_projection_options();
   if (curr_path != '' && curr_folderid != '' && curr_path != '') {
     $('#current_path').val(curr_path);
     listgdrive(curr_remote, curr_path, curr_folderid);
   }
 });
 
+function change_remote_name(remote_name) {
+  curr_remote = remote_name
+  curr_folderid = 'root'
+  curr_path = '/'
+  $('#current_path').val('/');
+  listgdrive(curr_remote, curr_path, curr_folderid);
+}
+
 function set_remote_options() {
   console.log(remote_names);
-  var str = '<select id="remote_name" name="remote_name" class="form-control form-control-sm">';
+  var str = '<select id="remote_name" name="remote_name" class="form-control form-control-sm" onchange="change_remote_name(value)">';
+  if (curr_remote == undefined || curr_remote == '') {
+    curr_remote = default_remote;
+  }
   for(var i in remote_names) {
-    if (remote_names[i] == default_remote) {
+    if (remote_names[i] == curr_remote) {
       str += '<option value="' + remote_names[i] + '" selected>' + remote_names[i] + '</option>';
     } else {
       str += '<option value="' + remote_names[i] + '">' + remote_names[i] + '</option>';
     }
   }
   str += '</select>'
-  document.getElementById("remote_options_div").innerHTML = str;
+  document.getElementById("remote_options_span").innerHTML = str;
+}
+
+function set_projection_options() {
+  var opts = ["NoVR", "180", "180_LR", "180_MONO", "360", "360_LR", "360_TB", "AUTO", "Cube", "EAC", "EAC_LR", "NONE"];
+  var str = ""
+  str += '<select id="vr_projection" name="vr_projection" class="form-control form-control-sm">';
+  for (var i in opts) {
+    if (i == 0) {
+      str += '<option value="' +opts[i]+ '" selected>'+opts[i]+'</option>';
+    } else {
+      str += '<option value="' +opts[i]+ '">'+opts[i]+'</option>';
+    }
+  }
+  str += '</select>';
+  document.getElementById("projection_options_span").innerHTML = str;
 }
 
 $("body").on('click', '#reset_cache_btn', function(e) {
@@ -119,6 +145,10 @@ let listgdrive = (remote_name, path = '/', folderid = 'root', force=false) => {
       },
       dataType: 'json'
   }).done((data) => {
+      if (data.ret != 'success') {
+        $.notify('<strong>경로 읽기 실패: 로그를 확인해주세요.</strong>', {type: 'danger'});
+	return false;
+      }
       if (data.list.length == 0) {
         return false;
       }
@@ -177,11 +207,15 @@ let listgdrive = (remote_name, path = '/', folderid = 'root', force=false) => {
 	      new_folderid = $(evt.currentTarget).attr('folderid');
           }
 	  mtype = $(evt.currentTarget).attr('mtype');
+          fname = $(evt.currentTarget).text()
 	  if (mtype == "application/vnd.google-apps.folder") {
             $('#current_path').val(new_path);
             listgdrive(remote_name, new_path, new_folderid);
 	  }  else if (mtype.startsWith('video')) {
-            play_video(new_folderid, mtype);
+            play_video(fname, new_folderid, mtype);
+	  }  else if (fname.endsWith('.srt')) {
+            subtitle_fileid = new_folderid;
+            $.notify('<strong>재생용 자막으로 설정하였습니다.</strong><br/>파일명: '+fname, {type: 'success'});
 	  } else {
 	    alert('지원하지 않는 미디어 유형입니다.\n(type; '+mtype+')');
 	  }
@@ -192,25 +226,39 @@ let listgdrive = (remote_name, path = '/', folderid = 'root', force=false) => {
   return false;
 }
 
-$(function(){
-    $('#playvideo_modal').modal({
-        show: false
-    }).on('hidden.bs.modal', function(){
-        //$(this).find('video')[0].pause();
-	player.pause();
-    });
-});
-
-function play_video(fileid, mtype) {
+function play_video(fname, fileid, mtype) {
   var str = '';
   var video_url = proxy_url + ((proxy_url.indexOf('?') == -1) ? '?' : '&') + 'f=' + fileid + '&r=' +curr_remote;
-  player = videojs('player');
-  player.src({type: 'video/mp4', src: video_url});
-  //player.src({type: mtype, src: video_url});
-  $("#playvideo_modal").modal();
-  player.play();
-}
+  var vr_projection = document.getElementById('vr_projection').value;
 
+  var form = document.playform;
+  if (vr_projection == 'NoVR') {
+    var url = '/mod/gdproxy/video';
+  } else {
+    var url = '/mod/gdproxy/vrvideo';
+  }
+  var popupWidth = 980;
+  var leftPos = screen.width - popupWidth;
+  window.open('', fileid, "location=no,directories=no,resizable=no,status=no,toolbar=no,menubar=no,width=" + popupWidth + ", height=560, top=100, left=" + leftPos);
+  form.action = url;
+  form.method = "post";
+  form.target = fileid;
+
+  $('#play_title').val(fname);
+  $('#play_source_src').val(video_url);
+  $('#play_source_type').val('video/mp4');
+  $('#play_vr_projection').val(vr_projection);
+
+  console.log(subtitle_fileid);
+  if (subtitle_fileid != "nosub") {
+    var subtitle_url = proxy_url + ((proxy_url.indexOf('?') == -1) ? '?' : '&') + 'f=' + subtitle_fileid + '&r=' +curr_remote +'&k=subtitle';
+    $('#play_subtitle_src').val(subtitle_url);
+    subtitle_fileid = "nosub";
+    console.log(subtitle_fileid)
+  }
+  form.submit();
+  $('#play_subtitle_src').val('');
+};
 
 </script>
 {% endblock %}
